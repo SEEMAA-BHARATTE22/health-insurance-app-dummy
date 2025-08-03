@@ -1,124 +1,92 @@
-import pandas as pd
-import joblib
+import streamlit as st
+from prediction_helper import predict  # Ensure this function is correctly implemented
+from PIL import Image
 
-model_young = joblib.load("artifacts\model_young.joblib")
-model_rest = joblib.load("artifacts\model_rest.joblib")
-scaler_young = joblib.load("artifacts\scaler_young.joblib")
-scaler_rest = joblib.load("artifacts\scaler_rest.joblib")
+# Set page configuration
+st.set_page_config(page_title="🎉 Health Insurance Predictor", layout="wide")
 
+# 🎉 App Title - Big and Bold
+st.markdown('<h1 style="text-align:center; font-size:50px; font-weight:bold; color:#4A148C;">🎉 Health Insurance Predictor</h1>', unsafe_allow_html=True)
 
-def calculate_normalized_risk(medical_history):
-    risk_scores = {
-        "diabetes": 6,
-        "heart disease": 8,
-        "high blood pressure": 6,
-        "thyroid": 5,
-        "no disease": 0,
-        "none": 0
-    }
-    # Split the medical history into potential two parts and convert to lowercase
-    diseases = medical_history.lower().split(" & ")
-
-    # Calculate the total risk score by summing the risk scores for each part
-    total_risk_score = sum(risk_scores.get(disease, 0) for disease in diseases)  # Default to 0 if disease not found
-
-    max_score = 14 # risk score for heart disease (8) + second max risk score (6) for diabetes or high blood pressure
-    min_score = 0  # Since the minimum score is always 0
-
-    # Normalize the total risk score
-    normalized_risk_score = (total_risk_score - min_score) / (max_score - min_score)
-
-    return normalized_risk_score
+# Apply background color
+st.markdown(f"""
+    <style>
+        .stApp {{
+            background: linear-gradient(to right, #E3F2FD, #E1BEE7);
+        }}
+    </style>
+""", unsafe_allow_html=True)
 
 
+# Define categorical dropdown options
+categorical_options = {
+    'Gender': ['Male', 'Female'],
+    'Marital Status': ['Married', 'Unmarried'],
+    'BMI Category': ['Normal', 'Obesity', 'Overweight', 'Underweight'],
+    'Smoking Status': ['No Smoking', 'Regular', 'Occasional'],
+    'Employment Status': ['Salaried', 'Self-Employed', 'Freelancer'],
+    'Region': ['Northwest', 'Southeast', 'Northeast', 'Southwest'],
+    'Medical History': [
+        'No Disease', 'Diabetes', 'High Blood Pressure', 'Diabetes & High BP',
+        'Thyroid', 'Heart Disease', 'BP & Heart Disease', 'Diabetes & Thyroid',
+        'Diabetes & Heart Disease'
+    ],
+    'Insurance Plan': ['Bronze', 'Silver', 'Gold']
+}
 
+# 📋 User Input Section
+st.markdown('<h2 style="text-align:center; color:#D81B60;">📋 Enter Your Details</h2>', unsafe_allow_html=True)
 
+# 🎚️ Sliders for age & income
+age = st.slider('🎂 Age', min_value=18, max_value=100, value=25)
+income_lakhs = st.slider('💰 Income in Lakhs', min_value=0, max_value=200, value=10)
 
+# 🏷️ Arrange Inputs in Three-Column Layout
+col1, col2, col3 = st.columns(3)
 
-def preprocess_input(input_dict):
-    # Define the expected columns and initialize the DataFrame with zeros
-    expected_columns = [
-        'age', 'number_of_dependants', 'income_lakhs', 'insurance_plan', 'genetical_risk', 'normalized_risk_score',
-        'gender_Male', 'region_Northwest', 'region_Southeast', 'region_Southwest', 'marital_status_Unmarried',
-        'bmi_category_Obesity', 'bmi_category_Overweight', 'bmi_category_Underweight', 'smoking_status_Occasional',
-        'smoking_status_Regular', 'employment_status_Salaried', 'employment_status_Self-Employed'
-    ]
+with col1:
+    gender = st.selectbox('⚧️ Gender', categorical_options['Gender'])
+    smoking_status = st.selectbox('🚬 Smoking Status', categorical_options['Smoking Status'])
+    bmi_category = st.selectbox('⚖️ BMI Category', categorical_options['BMI Category'])
+    employment_status = st.selectbox('💼 Employment Status', categorical_options['Employment Status'])
 
-    insurance_plan_encoding = {'Bronze': 1, 'Silver': 2, 'Gold': 3}
+with col2:
+    number_of_dependants = st.number_input('👨‍👩‍👦 Number of Dependants', min_value=0, step=1, max_value=20)
+    marital_status = st.selectbox('💍 Marital Status', categorical_options['Marital Status'])
+    region = st.selectbox('🌎 Region', categorical_options['Region'])
+    genetical_risk = st.slider('🧬 Genetical Risk (0-5)', min_value=0, max_value=5, value=2)
 
-    df = pd.DataFrame(0, columns=expected_columns, index=[0])
-    # df.fillna(0, inplace=True)
+with col3:
+    insurance_plan = st.selectbox('📜 Insurance Plan', categorical_options['Insurance Plan'])
+    medical_history = st.selectbox('🏥 Medical History', categorical_options['Medical History'])
 
-    # Manually assign values for each categorical input based on input_dict
-    for key, value in input_dict.items():
-        if key == 'Gender' and value == 'Male':
-            df['gender_Male'] = 1
-        elif key == 'Region':
-            if value == 'Northwest':
-                df['region_Northwest'] = 1
-            elif value == 'Southeast':
-                df['region_Southeast'] = 1
-            elif value == 'Southwest':
-                df['region_Southwest'] = 1
-        elif key == 'Marital Status' and value == 'Unmarried':
-            df['marital_status_Unmarried'] = 1
-        elif key == 'BMI Category':
-            if value == 'Obesity':
-                df['bmi_category_Obesity'] = 1
-            elif value == 'Overweight':
-                df['bmi_category_Overweight'] = 1
-            elif value == 'Underweight':
-                df['bmi_category_Underweight'] = 1
-        elif key == 'Smoking Status':
-            if value == 'Occasional':
-                df['smoking_status_Occasional'] = 1
-            elif value == 'Regular':
-                df['smoking_status_Regular'] = 1
-        elif key == 'Employment Status':
-            if value == 'Salaried':
-                df['employment_status_Salaried'] = 1
-            elif value == 'Self-Employed':
-                df['employment_status_Self-Employed'] = 1
-        elif key == 'Insurance Plan':  # Correct key usage with case sensitivity
-            df['insurance_plan'] = insurance_plan_encoding.get(value, 1)
-        elif key == 'Age':  # Correct key usage with case sensitivity
-            df['age'] = value
-        elif key == 'Number of Dependants':  # Correct key usage with case sensitivity
-            df['number_of_dependants'] = value
-        elif key == 'Income in Lakhs':  # Correct key usage with case sensitivity
-            df['income_lakhs'] = value
-        elif key == "Genetical Risk":
-            df['genetical_risk'] = value
+# 📊 Collect user inputs in a dictionary
+input_dict = {
+    'Age': age,
+    'Number of Dependants': number_of_dependants,
+    'Income in Lakhs': income_lakhs,
+    'Genetical Risk': genetical_risk,
+    'Insurance Plan': insurance_plan,
+    'Employment Status': employment_status,
+    'Gender': gender,
+    'Marital Status': marital_status,
+    'BMI Category': bmi_category,
+    'Smoking Status': smoking_status,
+    'Region': region,
+    'Medical History': medical_history
+}
 
-    # Assuming the 'normalized_risk_score' needs to be calculated based on the 'age'
-    df['normalized_risk_score'] = calculate_normalized_risk(input_dict['Medical History'])
-    df = handle_scaling(input_dict['Age'], df)
+# 🔮 Prediction Section
+st.markdown('<h2 style="text-align:center; color:#D81B60;">🔮 Prediction</h2>', unsafe_allow_html=True)
 
-    return df
+# Prediction Button
+if st.button('🎯 Predict Insurance Cost'):
+    prediction = predict(input_dict)
+   
+    # Ensure prediction output is formatted properly
+    try:
+        formatted_prediction = f"{float(prediction):,.2f} $"
+    except ValueError:
+        formatted_prediction = str(prediction)  # In case of unexpected output
 
-def handle_scaling(age, df):
-    # scale age and income_lakhs column
-    if age <= 25:
-        scaler_object = scaler_young
-    else:
-        scaler_object = scaler_rest
-
-    cols_to_scale = scaler_object['cols_to_scale']
-    scaler = scaler_object['scaler']
-
-    df['income_level'] = None # since scaler object expects income_level supply it. This will have no impact on anything
-    df[cols_to_scale] = scaler.transform(df[cols_to_scale])
-
-    df.drop('income_level', axis='columns', inplace=True)
-
-    return df
-
-def predict(input_dict):
-    input_df = preprocess_input(input_dict)
-
-    if input_dict['Age'] <= 25:
-        prediction = model_young.predict(input_df)
-    else:
-        prediction = model_rest.predict(input_df)
-
-    return int(prediction[0])
+    st.markdown(f'<div style="text-align:center; background:linear-gradient(45deg, #4CAF50, #2E7D32); color:white; padding:12px; font-size:20px; font-weight:bold; border-radius:10px; margin-top:20px;">💰 Predicted Health Insurance Cost: {formatted_prediction}</div>', unsafe_allow_html=True)
